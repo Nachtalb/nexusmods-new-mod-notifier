@@ -34,7 +34,9 @@ def save_state(state_file: str, seen_mods: set[int]) -> None:
         json.dump(list(seen_mods), f)
 
 
-def main(api_key: str, game_domain_name: str, chat_id: str, tg_token: str, hide_adult_content: bool) -> None:
+def main(
+    api_key: str, game_domain_name: str, chat_id: str, tg_token: str, hide_adult_content: bool, loop: bool
+) -> None:
     state_file = "seen_mods.json"
     seen_mods = load_state(state_file)
     new_mods_data = []
@@ -77,9 +79,12 @@ def main(api_key: str, game_domain_name: str, chat_id: str, tg_token: str, hide_
         else:
             print("No new mods found.")
 
-        print("Sleeping for 5 minutes...")
         save_state(state_file, seen_mods)
-        time.sleep(300)
+        if loop:
+            print("Sleeping for 5 minutes...")
+            time.sleep(300)
+        else:
+            break
 
 
 try:
@@ -90,8 +95,9 @@ try:
         parser.add_argument("-c", "--chat-id", required=True, help="Telegram chat ID")
         parser.add_argument("-t", "--tg-token", required=True, help="Telegram bot token")
         parser.add_argument("-a", "--hide-adult-content", action="store_true", help="Hide adult content", default=False)
+        parser.add_argument("-l", "--no-loop", action="store_true", help="Don't loot forever", default=False)
         args = parser.parse_args()
-        main(args.api_key, args.game_name, args.chat_id, args.tg_token, args.hide_adult_content)
+        main(args.api_key, args.game_name, args.chat_id, args.tg_token, args.hide_adult_content, not args.no_loop)
 except KeyboardInterrupt:
     print("\rExiting...")
     exit(0)
