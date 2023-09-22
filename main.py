@@ -34,7 +34,7 @@ def save_state(state_file: str, seen_mods: set[int]) -> None:
         json.dump(list(seen_mods), f)
 
 
-def main(api_key: str, game_domain_name: str, chat_id: str, tg_token: str) -> None:
+def main(api_key: str, game_domain_name: str, chat_id: str, tg_token: str, hide_adult_content: bool) -> None:
     state_file = "seen_mods.json"
     seen_mods = load_state(state_file)
     new_mods_data = []
@@ -46,10 +46,14 @@ def main(api_key: str, game_domain_name: str, chat_id: str, tg_token: str) -> No
             mod_id = mod["mod_id"]
             if mod_id not in seen_mods:
                 if not mod["available"]:
-                    print("Mod not available yet, skipping...")
+                    print(f"Mod [id={mod_id}] not available yet, skipping...")
                     continue
 
                 seen_mods.add(mod_id)
+
+                if hide_adult_content and mod["contains_adult_content"]:
+                    print("Mod contains adult content, skipping...")
+                    continue
 
                 new_mod_data = {
                     "ID": mod_id,
@@ -85,8 +89,9 @@ try:
         parser.add_argument("-g", "--game-name", required=True, help="Game domain name for Nexus Mods, eg. 'starfield'")
         parser.add_argument("-c", "--chat-id", required=True, help="Telegram chat ID")
         parser.add_argument("-t", "--tg-token", required=True, help="Telegram bot token")
+        parser.add_argument("-a", "--hide-adult-content", action="store_true", help="Hide adult content", default=False)
         args = parser.parse_args()
-        main(args.api_key, args.game_name, args.chat_id, args.tg_token)
+        main(args.api_key, args.game_name, args.chat_id, args.tg_token, args.hide_adult_content)
 except KeyboardInterrupt:
     print("\rExiting...")
     exit(0)
