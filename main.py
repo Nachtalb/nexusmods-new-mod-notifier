@@ -15,9 +15,11 @@ def fetch_latest_mods(api_key: str, game_domain_name: str) -> list[dict[str, Any
     return response.json()  # type: ignore[no-any-return]
 
 
-def send_telegram_message(chat_id: str, text: str, tg_token: str) -> None:
+def send_telegram_message(chat_id: str, text: str, tg_token: str, topic_id: str) -> None:
     url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    if topic_id:
+        payload["message_thread_id"] = topic_id
     requests.post(url, data=payload)
 
 
@@ -35,7 +37,13 @@ def save_state(state_file: str, seen_mods: set[int]) -> None:
 
 
 def main(
-    api_key: str, game_domain_name: str, chat_id: str, tg_token: str, hide_adult_content: bool, loop: bool
+    api_key: str,
+    game_domain_name: str,
+    chat_id: str,
+    tg_token: str,
+    hide_adult_content: bool,
+    loop: bool,
+    topic_id: str,
 ) -> None:
     state_file = "seen_mods.json"
     seen_mods = load_state(state_file)
@@ -66,10 +74,13 @@ def main(
                 new_mods_data.append(new_mod_data)
 
                 send_telegram_message(
-                    chat_id,
-                    f"<b>{mod.get('name', 'N/A')}</b>\n{mod['author']} - Version {mod['version']}\nLink:"
-                    f" https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}",
-                    tg_token,
+                    chat_id=chat_id,
+                    text=(
+                        f"<b>{mod.get('name', 'N/A')}</b>\n{mod['author']} - Version {mod['version']}\nLink:"
+                        f" https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}"
+                    ),
+                    tg_token=tg_token,
+                    topic_id=topic_id,
                 )
 
         if new_mods_data:
@@ -93,11 +104,19 @@ try:
         parser.add_argument("-k", "--api-key", required=True, help="API key for Nexus Mods")
         parser.add_argument("-g", "--game-name", required=True, help="Game domain name for Nexus Mods, eg. 'starfield'")
         parser.add_argument("-c", "--chat-id", required=True, help="Telegram chat ID")
-        parser.add_argument("-t", "--tg-token", required=True, help="Telegram bot token")
+        parser.add_argument("-o", "--topic-id", help="Telegram group topic ID", default="")
         parser.add_argument("-a", "--hide-adult-content", action="store_true", help="Hide adult content", default=False)
         parser.add_argument("-l", "--no-loop", action="store_true", help="Don't loot forever", default=False)
         args = parser.parse_args()
-        main(args.api_key, args.game_name, args.chat_id, args.tg_token, args.hide_adult_content, not args.no_loop)
+        main(
+            api_key=args.api_key,
+            game_domain_name=args.game_name,
+            chat_id=args.chat_id,
+            tg_token=args.topic_id,
+            hide_adult_content=args.hide_adult_content,
+            loop=not args.no_loop,
+            topic_id=args.topic_id,
+        )
 except KeyboardInterrupt:
     print("\rExiting...")
     exit(0)

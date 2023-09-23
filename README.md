@@ -29,6 +29,7 @@ python main.py -k API_KEY -g GAME_NAME -c CHAT_ID -t TG_TOKEN [-a] [-l]
 - `-g, --game-name`: Game domain name for Nexus Mods, e.g., 'starfield'.
   (Required)
 - `-c, --chat-id`: Telegram chat ID. (Required)
+- `-o, --thread-id`: Telegram group topic ID. (Optional)
 - `-t, --tg-token`: Telegram bot token. (Required)
 - `-a, --hide-adult-content`: Flag to hide adult content. (Optional)
 - `-l`, `--no-loop`: Don't loot forever. (Optional)
