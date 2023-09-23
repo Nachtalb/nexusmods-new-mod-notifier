@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "new-mods"
-version = "0.1.0"
+version = "0.2.0"
 description = ""
 authors = ["Nachtalb <na@nachtalb.io>"]
 readme = "README.md"
@@ -20,7 +20,7 @@ isort = "^5.12.0"
 types-requests = "^2.31.0.3"
 types-tabulate = "^0.9.0.3"
 ipdb = "^0.13.13"
-ipython = {extras = ["black"], version = "^8.15.0"}
+ipython = { extras = ["black"], version = "^8.15.0" }
 
 [build-system]
 requires = ["poetry-core"]

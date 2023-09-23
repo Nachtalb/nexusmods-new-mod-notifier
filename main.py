@@ -33,7 +33,10 @@ def cache_with_expiry(seconds: int) -> Callable[[Callable[..., RT]], Callable[..
 
 
 def nm_request(endpoint: str, api_key: str, params: dict[str, Any] | None = None) -> Any:
-    headers = {"apikey": api_key, "User-Agent": "Nexus Mods Latest Mods Notifier / v0.1.0"}
+    headers = {
+        "apikey": api_key,
+        "User-Agent": "NexusMods Notifier/0.2.0 (+https://github.com/Nachtalb/nexusmods-notifier)",
+    }
     url = f"https://api.nexusmods.com/v1/{endpoint}"
     response = requests.get(url, headers=headers, params=params)
     return response.json()
