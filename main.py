@@ -1,35 +1,14 @@
 import argparse
 import json
-import os
+import re
 import time
-from functools import wraps
-from typing import Any, Callable, Dict, Literal, Tuple, TypeVar
+from pathlib import Path
+from typing import Any, Literal, TypeVar
 
 import requests
 from tabulate import tabulate
 
 RT = TypeVar("RT")
-
-
-def cache_with_expiry(seconds: int) -> Callable[[Callable[..., RT]], Callable[..., RT]]:
-    cache: Dict[Tuple[Any, frozenset[tuple[str, Any]]], Tuple[float, Any]] = {}
-
-    def decorator(func: Callable[..., RT]) -> Callable[..., RT]:
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> RT:
-            cache_key: Tuple[Any, frozenset[tuple[str, Any]]] = (args, frozenset(kwargs.items()))
-            if cache_key in cache:
-                cached_time, cached_result = cache[cache_key]
-                if time.time() - cached_time < seconds:
-                    return cached_result  # type: ignore[no-any-return]
-
-            result: Any = func(*args, **kwargs)
-            cache[cache_key] = (time.time(), result)
-            return result  # type: ignore[no-any-return]
-
-        return wrapper
-
-    return decorator
 
 
 def nm_request(endpoint: str, api_key: str, params: dict[str, Any] | None = None) -> Any:
