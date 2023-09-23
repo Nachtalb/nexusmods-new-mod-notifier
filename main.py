@@ -125,15 +125,16 @@ def additions(
                 }
                 new_mods_data.append(new_mod_data)
 
-                send_telegram_message(
-                    chat_id=chat_id,
-                    text=(
-                        f"<b>{mod.get('name', 'N/A')}</b>\n{mod['author']} - Version {mod['version']}\nLink:"
-                        f" https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}"
-                    ),
-                    tg_token=tg_token,
-                    topic_id=topic_id,
-                )
+                if tg_token:
+                    send_telegram_message(
+                        chat_id=chat_id,
+                        text=(
+                            f"<b>{mod.get('name', 'N/A')}</b>\n{mod['author']} - Version {mod['version']}\nLink:"
+                            f" https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}"
+                        ),
+                        tg_token=tg_token,
+                        topic_id=topic_id,
+                    )
 
         if new_mods_data:
             print("New mods found:")
@@ -231,17 +232,18 @@ def updates(
                             for version, changelog in new_versions.items()
                         )
 
-                        send_telegram_message(
-                            chat_id=chat_id,
-                            text=(
-                                f"<b>{mod_details['name']}</b>\n{mod_details['author']} - Version {old_version} ->"
-                                f" {new_version}\n"
-                                f"Link: https://nexusmods.com/{mod_details['domain_name']}/mods/{mod_id}\n"
-                                f"Changelog:\n{changelog_text}"
-                            ),
-                            tg_token=tg_token,
-                            topic_id=topic_id,
-                        )
+                        if tg_token:
+                            send_telegram_message(
+                                chat_id=chat_id,
+                                text=(
+                                    f"<b>{mod_details['name']}</b>\n{mod_details['author']} - Version {old_version} ->"
+                                    f" {new_version}\n"
+                                    f"Link: https://nexusmods.com/{mod_details['domain_name']}/mods/{mod_id}\n"
+                                    f"Changelog:\n{changelog_text}"
+                                ),
+                                tg_token=tg_token,
+                                topic_id=topic_id,
+                            )
 
                         for version in new_versions:
                             mods_with_new_version.append(
@@ -285,8 +287,8 @@ try:
         parser = argparse.ArgumentParser()
         parser.add_argument("-k", "--api-key", required=True, help="API key for Nexus Mods")
         parser.add_argument("-g", "--game-name", required=True, help="Game domain name for Nexus Mods, eg. 'starfield'")
-        parser.add_argument("-c", "--chat-id", required=True, help="Telegram chat ID")
-        parser.add_argument("-t", "--tg-token", required=True, help="Telegram bot token")
+        parser.add_argument("-c", "--chat-id", help="Telegram chat ID")
+        parser.add_argument("-t", "--tg-token", help="Telegram bot token")
         parser.add_argument("-o", "--topic-id", help="Telegram group topic ID", default="")
         parser.add_argument("-a", "--hide-adult-content", action="store_true", help="Hide adult content", default=False)
         parser.add_argument("-l", "--no-loop", action="store_true", help="Don't loot forever", default=False)
@@ -301,13 +303,20 @@ try:
         sub_parser = parser.add_subparsers(dest="command")
         sub_parser.required = True
 
-        additions_parser = sub_parser.add_parser("additions", help="Get latest additions")
+        additions_parser = sub_parser.add_parser("additions", help="Get updates for new mods")
         additions_parser.set_defaults(command="additions")
 
-        updates_parser = sub_parser.add_parser("updates", help="Get latest updates")
+        updates_parser = sub_parser.add_parser("updates", help="Get updates for new updates")
         updates_parser.set_defaults(command="updates")
 
         args = parser.parse_args()
+
+        if args.tg_token or args.chat_id and (not args.tg_token or not args.chat_id):
+            print("Both chat ID and Telegram token must be provided")
+            exit(1)
+
+        if not args.tg_token:
+            print("Telegram token not provided, not sending messages")
 
         match args.command:
             case "additions":
