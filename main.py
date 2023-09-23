@@ -25,10 +25,10 @@ def fetch_games(api_key: str) -> list[dict[str, Any]]:
     return nm_request("games.json", api_key, {"include_unapproved": "false"})  # type: ignore[no-any-return]
 
 
-def game_categories(api_key: str, game_domain_name: str) -> dict[str, Any]:
+def game_categories(api_key: str, game_domain_name: str) -> dict[int, Any]:
     cache_file = Path("game_categories.json")
     if (cache := load_state(cache_file)) and game_domain_name in cache:
-        return cache[game_domain_name]  # type: ignore[no-any-return]
+        return {int(id): value for id, value in cache[game_domain_name].items()}
 
     games = fetch_games(api_key)
     cache = {
