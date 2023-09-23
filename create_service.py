@@ -30,12 +30,13 @@ def save(prev_h_len: int, histfile: str) -> None:
 atexit.register(save, h_len, ".history")
 
 
-def run_command(command: list[str]) -> None:
+def run_command(command: list[str], check: bool = True) -> subprocess.CompletedProcess[bytes] | None:
     try:
         printc(f"{' '.join(command)}", "33")
-        subprocess.run(command, check=True)
+        return subprocess.run(command, check=check)
     except subprocess.CalledProcessError:
         print(f"❌ Failed to run command: {command}")
+        return None
 
 
 def save_with_privileges_check(file_path: Path, content: str) -> None:
@@ -244,18 +245,24 @@ WantedBy=timers.target
     else:
         print("❌ Daemon not reloaded")
 
-    # Enable timer
-    if (input("🔃 Enable timer? [Y/n]: ") or "y").lower().startswith("y"):
-        try:
-            if requires_sudo:
-                run_command(["sudo", "systemctl", "enable", "--now", f"{service_name}.timer"])
-            else:
-                run_command(["systemctl", "--user", "enable", "--now", f"{service_name}.timer"])
-            print("✅ Timer enabled")
-        except subprocess.CalledProcessError:
-            print("❌ Failed to enable timer")
+    if requires_sudo:
+        timer_enabled_res = run_command(["sudo", "systemctl", "is-active", f"{service_name}.timer"], check=False)
     else:
-        print("❌ Timer not enabled")
+        timer_enabled_res = run_command(["systemctl", "--user", "is-active", f"{service_name}.timer"], check=False)
+
+    # Enable timer
+    if timer_enabled_res and timer_enabled_res.returncode != 0:
+        if (input("🔃 Enable timer? [Y/n]: ") or "y").lower().startswith("y"):
+            try:
+                if requires_sudo:
+                    run_command(["sudo", "systemctl", "enable", "--now", f"{service_name}.timer"])
+                else:
+                    run_command(["systemctl", "--user", "enable", "--now", f"{service_name}.timer"])
+                print("✅ Timer enabled")
+            except subprocess.CalledProcessError:
+                print("❌ Failed to enable timer")
+        else:
+            print("❌ Timer not enabled")
 
     print("✅ Done!\n")
 
