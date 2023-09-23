@@ -189,9 +189,24 @@ WantedBy=timers.target
 
     print("=" * 80)
 
-    save_location = Path.home() / ".config/systemd/user/"
-    save_location = Path(input(f"📂 Enter the path to save the files to [{save_location}]: ") or save_location)
-    printc(f"{save_location}")
+    requires_sudo = False
+    while True:
+        save_location = Path.home() / ".config/systemd/user/"
+        save_location = Path(input(f"📂 Enter the path to save the files to [{save_location}]: ") or save_location)
+        printc(f"{save_location}")
+
+        if save_location == Path("/etc/systemd/system/"):
+            requires_sudo = True
+
+        elif save_location not in (Path.home() / ".config/systemd/user/", Path("/etc/systemd/system/")):
+            print("⚠️ WARNING: You are saving the files to a non-standard location.")
+            print("👉 Consider saving the files to ~/.config/systemd/user/ or /etc/systemd/system/.")
+            if not input("Continue? [y/N]: ").lower().startswith("y"):
+                continue
+            else:
+                if input("🔑 Do you need sudo to save files to this location? [y/N]: ").lower().startswith("y"):
+                    requires_sudo = True
+        break
 
     print("=" * 80)
     print(highlight(systemd_template, IniLexer(), TerminalFormatter()))
@@ -219,12 +234,10 @@ WantedBy=timers.target
     # Damon reload
     if (input("🔃 Reload daemon? [Y/n]: ") or "y").lower().startswith("y"):
         try:
-            try:
-                assert save_location.relative_to(Path.home() / ".config/systemd/user/")
-                run_command(["systemctl", "--user", "daemon-reload"])
-            except ValueError:
+            if requires_sudo:
                 run_command(["sudo", "systemctl", "daemon-reload"])
-
+            else:
+                run_command(["systemctl", "--user", "daemon-reload"])
             print("✅ Daemon reloaded")
         except subprocess.CalledProcessError:
             print("❌ Failed to reload daemon")
@@ -234,12 +247,10 @@ WantedBy=timers.target
     # Enable timer
     if (input("🔃 Enable timer? [Y/n]: ") or "y").lower().startswith("y"):
         try:
-            try:
-                assert save_location.relative_to(Path.home() / ".config/systemd/user/")
-                run_command(["systemctl", "--user", "enable", "--now", f"{service_name}.timer"])
-            except ValueError:
+            if requires_sudo:
                 run_command(["sudo", "systemctl", "enable", "--now", f"{service_name}.timer"])
-
+            else:
+                run_command(["systemctl", "--user", "enable", "--now", f"{service_name}.timer"])
             print("✅ Timer enabled")
         except subprocess.CalledProcessError:
             print("❌ Failed to enable timer")
