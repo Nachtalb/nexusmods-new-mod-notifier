@@ -314,7 +314,7 @@ try:
 
         args = parser.parse_args()
 
-        if args.tg_token or args.chat_id and (not args.tg_token or not args.chat_id):
+        if (args.tg_token or args.chat_id) and (not args.tg_token or not args.chat_id):
             print("Both chat ID and Telegram token must be provided")
             exit(1)
 
