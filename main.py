@@ -87,7 +87,7 @@ def save_state(state_file: str | Path, seen_mods: Any) -> None:
 
 
 def tagify(text: str) -> str:
-    return "#" + re.sub(r"[ -/]", "_", re.sub(r",", "", text))
+    return "#" + re.sub(r"[ -/]", "_", re.sub(r",", "", text)).lower()
 
 
 def additions(
