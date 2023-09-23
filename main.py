@@ -8,11 +8,26 @@ import requests
 from tabulate import tabulate
 
 
-def fetch_latest_mods(api_key: str, game_domain_name: str) -> list[dict[str, Any]]:
+def nm_request(endpoint: str, api_key: str, params: dict[str, Any] | None = None) -> Any:
     headers = {"apikey": api_key, "User-Agent": "Nexus Mods Latest Mods Notifier / v0.1.0"}
-    url = f"https://api.nexusmods.com/v1/games/{game_domain_name}/mods/latest_added.json"
-    response = requests.get(url, headers=headers)
-    return response.json()  # type: ignore[no-any-return]
+    url = f"https://api.nexusmods.com/v1/{endpoint}"
+    response = requests.get(url, headers=headers, params=params)
+    return response.json()
+
+
+def fetch_latest_mods(api_key: str, game_domain_name: str) -> list[dict[str, Any]]:
+    return nm_request(f"games/{game_domain_name}/mods/latest_added.json", api_key)  # type: ignore[no-any-return]
+
+
+def fetch_tracked_mods(api_key: str, game_domain_name: str = "") -> list[dict[str, Any]]:
+    mods: list[dict[str, Any]] = nm_request("user/tracked_mods.json", api_key)
+    if game_domain_name:
+        mods = [mod for mod in mods if mod["domain_name"] == game_domain_name]
+    return mods
+
+
+def fetch_mod(api_key: str, game_domain_name: str, mod_id: int) -> dict[str, Any]:
+    return nm_request(f"games/{game_domain_name}/mods/{mod_id}.json", api_key)  # type: ignore[no-any-return]
 
 
 def send_telegram_message(chat_id: str, text: str, tg_token: str, topic_id: str) -> None:
@@ -36,7 +51,7 @@ def save_state(state_file: str, seen_mods: set[int]) -> None:
         json.dump(list(seen_mods), f)
 
 
-def main(
+def additions(
     api_key: str,
     game_domain_name: str,
     chat_id: str,
@@ -98,6 +113,18 @@ def main(
             break
 
 
+def updates(
+    api_key: str,
+    game_domain_name: str,
+    chat_id: str,
+    tg_token: str,
+    hide_adult_content: bool,
+    loop: bool,
+    topic_id: str,
+) -> None:
+    pass
+
+
 try:
     if __name__ == "__main__":
         parser = argparse.ArgumentParser()
@@ -107,16 +134,43 @@ try:
         parser.add_argument("-o", "--topic-id", help="Telegram group topic ID", default="")
         parser.add_argument("-a", "--hide-adult-content", action="store_true", help="Hide adult content", default=False)
         parser.add_argument("-l", "--no-loop", action="store_true", help="Don't loot forever", default=False)
-        args = parser.parse_args()
-        main(
-            api_key=args.api_key,
-            game_domain_name=args.game_name,
-            chat_id=args.chat_id,
-            tg_token=args.topic_id,
-            hide_adult_content=args.hide_adult_content,
-            loop=not args.no_loop,
-            topic_id=args.topic_id,
+
+        sub_parser = parser.add_subparsers(dest="command")
+        sub_parser.required = True
+
+        additions_parser = sub_parser.add_parser("additions", help="Get latest additions")
+        additions_parser.set_defaults(command="additions")
+
+        updates_parser = sub_parser.add_parser(
+            "updates", help='Get latest updates; use "-g all" to get updates for mods from all games'
         )
+        updates_parser.set_defaults(command="updates")
+
+        args = parser.parse_args()
+
+        match args.command:
+            case "additions":
+                additions(
+                    api_key=args.api_key,
+                    game_domain_name=args.game_name,
+                    chat_id=args.chat_id,
+                    tg_token=args.topic_id,
+                    hide_adult_content=args.hide_adult_content,
+                    loop=not args.no_loop,
+                    topic_id=args.topic_id,
+                )
+            case "updates":
+                updates(
+                    api_key=args.api_key,
+                    game_domain_name=args.game_name,
+                    chat_id=args.chat_id,
+                    tg_token=args.topic_id,
+                    hide_adult_content=args.hide_adult_content,
+                    loop=not args.no_loop,
+                    topic_id=args.topic_id,
+                )
+            case _:
+                print("Invalid command")
 except KeyboardInterrupt:
     print("\rExiting...")
     exit(0)
