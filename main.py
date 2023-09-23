@@ -21,6 +21,24 @@ def nm_request(endpoint: str, api_key: str, params: dict[str, Any] | None = None
     return response.json()
 
 
+def fetch_games(api_key: str) -> list[dict[str, Any]]:
+    return nm_request("games.json", api_key, {"include_unapproved": "false"})  # type: ignore[no-any-return]
+
+
+def game_categories(api_key: str, game_domain_name: str) -> dict[str, Any]:
+    cache_file = Path("game_categories.json")
+    if (cache := load_state(cache_file)) and game_domain_name in cache:
+        return cache[game_domain_name]  # type: ignore[no-any-return]
+
+    games = fetch_games(api_key)
+    cache = {
+        game["domain_name"]: {category["category_id"]: category["name"] for category in game["categories"]}
+        for game in games
+    }
+    save_state(cache_file, cache)
+    return cache[game_domain_name]  # type: ignore[no-any-return]
+
+
 def fetch_latest_mods(api_key: str, game_domain_name: str) -> list[dict[str, Any]]:
     return nm_request(f"games/{game_domain_name}/mods/latest_added.json", api_key)  # type: ignore[no-any-return]
 
@@ -58,15 +76,18 @@ def send_telegram_message(chat_id: str, text: str, tg_token: str, topic_id: str)
     requests.post(url, data=payload)
 
 
-def load_state(state_file: str) -> Any:
-    if os.path.exists(state_file):
-        with open(state_file) as f:
-            return json.load(f)
+def load_state(state_file: str | Path) -> Any:
+    state_file = Path(state_file)
+    if state_file.is_file():
+        return json.loads(state_file.read_text())
 
 
-def save_state(state_file: str, seen_mods: Any) -> None:
-    with open(state_file, "w") as f:
-        json.dump(seen_mods, f)
+def save_state(state_file: str | Path, seen_mods: Any) -> None:
+    Path(state_file).write_text(json.dumps(seen_mods))
+
+
+def tagify(text: str) -> str:
+    return "#" + re.sub(r"[ -/]", "_", re.sub(r",", "", text))
 
 
 def additions(
@@ -82,6 +103,7 @@ def additions(
     state_file = "seen_mods.json"
     seen_mods: set[int] = set(load_state(state_file) or [])  # pyright: ignore[reportGeneralTypeIssues]
     new_mods_data = []
+    categories = game_categories(api_key, game_domain_name)
 
     while True:
         print("Starting new mod check...")
@@ -103,6 +125,7 @@ def additions(
                     "ID": mod_id,
                     "Author": mod["author"],
                     "Name": mod.get("name", "N/A"),
+                    "Cagegory": categories[mod["category_id"]],
                     "Link": f"https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}",
                 }
                 new_mods_data.append(new_mod_data)
@@ -111,8 +134,10 @@ def additions(
                     send_telegram_message(
                         chat_id=chat_id,
                         text=(
-                            f"<b>{mod.get('name', 'N/A')}</b>\n{mod['author']} - Version {mod['version']}\nLink:"
-                            f" https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}"
+                            "<b><a"
+                            f" href=\"https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}\">"
+                            f"{mod.get('name', 'N/A')}</a></b>\n{mod['author']} -"
+                            f" Version {mod['version']}\n{tagify(categories[mod['category_id']])}"
                         ),
                         tg_token=tg_token,
                         topic_id=topic_id,
@@ -148,6 +173,7 @@ def updates(
         int(mod_id): value for mod_id, value in (load_state(cache_file_path) or {}).items()
     }
     tracked_mod_ids: set[int] = set()
+    categories = game_categories(api_key, game_domain_name)
 
     mods_with_new_version: list[dict[str, Any]] = []
 
@@ -218,9 +244,9 @@ def updates(
                             send_telegram_message(
                                 chat_id=chat_id,
                                 text=(
-                                    f"<b>{mod_details['name']}</b>\n{mod_details['author']} - Version {old_version} ->"
-                                    f" {new_version}\n"
-                                    f"Link: https://nexusmods.com/{mod_details['domain_name']}/mods/{mod_id}\n"
+                                    f'<b><a href="https://nexusmods.com/{game_domain_name}/mods/{mod_id}">'
+                                    f'{mod_details["name"]}</a></b>\n{mod_details["author"]} - Version {old_version} ->'
+                                    f' {new_version}\n{tagify(categories[mod_details["category_id"]])}\n\n'
                                     f"Changelog:\n{changelog_text}"
                                 ),
                                 tg_token=tg_token,
@@ -233,6 +259,7 @@ def updates(
                                     "ID": mod_id,
                                     "Author": mod_details["author"],
                                     "Name": mod_details["name"],
+                                    "Category": categories[mod_details["category_id"]],
                                     "Link": f"https://nexusmods.com/{mod_details['domain_name']}/mods/{mod_id}",
                                     "Old Version": old_version or "N/A",
                                     "New Version": version,
