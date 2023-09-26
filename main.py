@@ -232,7 +232,7 @@ async def additions(
         else:
             print("No new mods found.")
 
-        save_state(state_file, list(seen_mods))
+        save_state(state_file, list(seen_mods)[-100:])
         await asyncio.gather(*tasks)
         if loop:
             print(f"Sleeping for {frequency / 60} minute/s...")
