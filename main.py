@@ -70,12 +70,26 @@ class NM:
         return await self._nm_request(f"games/{game_domain_name}/mods/{mod_id}/changelogs.json")  # type: ignore[no-any-return]
 
 
-async def send_telegram_message(session: ClientSession, chat_id: str, text: str, tg_token: str, topic_id: str, disable_web_page_preview: bool = False) -> None:
-    url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": disable_web_page_preview}
-    if topic_id:
-        payload["message_thread_id"] = topic_id
-    await session.post(url, data=payload)
+
+class TG:
+    def __init__(self, session: ClientSession, tg_token: str) -> None:
+        self.session = session
+        self.tg_token = tg_token
+
+
+    async def _tg_request(self, endpoint: str, data: dict[str, Any] | None = None) -> Any:
+        if data:
+            data= {key: value for key, value in data.items() if value is not None}
+        url = f"https://api.telegram.org/bot{self.tg_token}/{endpoint}"
+        async with self.session.post(url, data=data) as response:
+            return await response.json()
+
+    async def send_message(self, chat_id: int | str, text: str, topic_id: int | str | None = None, disable_web_page_preview: bool = False) -> None:
+        data = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": disable_web_page_preview}
+        if topic_id:
+            data["message_thread_id"] = topic_id
+        await self._tg_request("sendMessage", data=data)
+
 
 
 def load_state(state_file: str | Path) -> Any:
@@ -107,6 +121,7 @@ async def additions(
     seen_mods: set[int] = set(load_state(state_file) or [])  # pyright: ignore[reportGeneralTypeIssues]
     new_mods_data = []
     nm = NM(api_key, session)
+    tg = TG(session, tg_token)
     categories = await nm.game_categories(game_domain_name)
 
     while True:
@@ -135,8 +150,7 @@ async def additions(
                 new_mods_data.append(new_mod_data)
 
                 if tg_token:
-                    await send_telegram_message(
-                        session=session,
+                    await tg.send_message(
                         chat_id=chat_id,
                         text=(
                             "<b><a"
@@ -144,7 +158,6 @@ async def additions(
                             f"{mod.get('name', 'N/A')}</a></b>\n{mod['author']} -"
                             f" Version {mod['version']}\n{tagify(categories[mod['category_id']])}"
                         ),
-                        tg_token=tg_token,
                         topic_id=topic_id,
                     )
 
@@ -175,6 +188,7 @@ async def updates(
     frequency: int,
 ) -> None:
     nm = NM(api_key, session)
+    tg = TG(session, tg_token)
     cache_file_path = "update_cache.json"
     local_cache: dict[int, dict[str, Any]] = {
         int(mod_id): value for mod_id, value in (load_state(cache_file_path) or {}).items()
@@ -256,8 +270,7 @@ async def updates(
                         )
 
                         if tg_token:
-                            await send_telegram_message(
-                                session=session,
+                            await tg.send_message(
                                 chat_id=chat_id,
                                 text=(
                                     f'<b><a href="https://nexusmods.com/{game_domain_name}/mods/{mod_id}">'
@@ -265,7 +278,6 @@ async def updates(
                                     f' {new_version}\n{tagify(categories[mod_details["category_id"]])}\n\n'
                                     f"Changelog:\n{changelog_text}"
                                 ),
-                                tg_token=tg_token,
                                 topic_id=topic_id,
                             )
 
@@ -294,11 +306,9 @@ async def updates(
                     f'<a href="{mod["Link"]}">{mod["Name"]}</a> - {mod["Author"]}\n'
                     for mod in new_mods
                 )
-                await send_telegram_message(
-                    session=session,
+                await tg.send_message(
                     chat_id=chat_id,
                     text=message,
-                    tg_token=tg_token,
                     topic_id=topic_id,
                     disable_web_page_preview=True,
                 )
