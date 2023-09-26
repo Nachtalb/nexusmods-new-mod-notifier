@@ -108,6 +108,51 @@ class TG:
             data["message_thread_id"] = topic_id
         return await self._tg_request("sendMediaGroup", data=data)
 
+    async def send_mod(
+        self,
+        chat_id: str | int,
+        mod_title: str,
+        mod_id: str | int,
+        mod_author: str,
+        mod_game: str,
+        mod_category: str,
+        mod_old_version: str = "",
+        mod_new_version: str = "",
+        content: str = "",
+        images: list[str] = [],
+        topic_id: str | int | None = None,
+    ) -> dict[str, Any]:
+        link = f"https://nexusmods.com/{mod_game}/mods/{mod_id}"
+        title = f'<b><a href="{link}">{mod_title}</a></b>'
+        category = tagify(mod_category)
+        version = f"Version {mod_old_version} -> {mod_new_version}\n" if mod_new_version else ""
+        images = images[:10]
+        content = content.replace("<br />", "\n").replace("\n\n", "\n")
+        content = f"{content.strip()}\n\n" if content else ""
+
+        text = f"{title}\n{mod_author} {category}\n{version}\n{content}<a href='{link}'>View on Nexus</a>"
+
+        response = None
+        if images:
+            response = await self.send_media_group(
+                chat_id=chat_id,
+                media=images,
+                text=text,
+                topic_id=topic_id,
+            )
+
+        if not response or not response["ok"]:
+            response = await self.send_message(
+                chat_id=chat_id,
+                text=text,
+                topic_id=topic_id,
+            )
+
+        if not response["ok"]:
+            print(f"Error sending message [{mod_id=}]: {response['description']}")
+
+        return response
+
 
 def load_state(state_file: str | Path) -> Any:
     state_file = Path(state_file)
@@ -143,6 +188,7 @@ async def additions(
 
     while True:
         print("Starting new mod check...")
+        tasks = []
         mods = await nm.fetch_latest_mods(game_domain_name)
         mods = [mod for mod in mods if mod["mod_id"] not in seen_mods and mod["available"]]
         for mod in sorted(mods, key=lambda x: x["mod_id"]):
@@ -163,27 +209,21 @@ async def additions(
             new_mods_data.append(new_mod_data)
 
             if tg_token:
-                images = (await nm.get_image_urls(mod_id))[:10]
-                link = f"https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}"
-                text = (
-                    "<b><a"
-                    f" href=\"{link}\">{mod.get('name', 'N/A')}</a></b>\n{mod['author']} "
-                    f"{tagify(categories[mod['category_id']])}\n\n{mod['summary']}\n\n<a"
-                    f" href='{link}'>View on Nexus</a>"
+                tasks.append(
+                    asyncio.create_task(
+                        tg.send_mod(
+                            chat_id=chat_id,
+                            mod_title=mod.get("name", "N/A"),
+                            mod_id=mod_id,
+                            mod_author=mod["author"],
+                            mod_game=mod["domain_name"],
+                            mod_category=categories[mod["category_id"]],
+                            content=mod["summary"],
+                            images=await nm.get_image_urls(mod_id),
+                            topic_id=topic_id,
+                        )
+                    )
                 )
-                if images:
-                    await tg.send_media_group(
-                        chat_id=chat_id,
-                        media=images,
-                        text=text,
-                        topic_id=topic_id,
-                    )
-                else:
-                    await tg.send_message(
-                        chat_id=chat_id,
-                        text=text,
-                        topic_id=topic_id,
-                    )
 
         if new_mods_data:
             print("New mods found:")
@@ -193,6 +233,7 @@ async def additions(
             print("No new mods found.")
 
         save_state(state_file, list(seen_mods))
+        await asyncio.gather(*tasks)
         if loop:
             print(f"Sleeping for {frequency / 60} minute/s...")
             time.sleep(frequency)
@@ -242,6 +283,7 @@ async def updates(
 
     while True:
         new_mods = []
+        tasks = []
         try:
             print("Starting update check...")
             # Fetch list of all recently updated mods
@@ -288,21 +330,31 @@ async def updates(
 
                         new_versions = dict(list(changelogs.items())[last_version_index + 1 :])
 
-                        changelog_text = "\n".join(
-                            "<b>{}</b>\n- {}".format(version, "\n- ".join(changelog))
-                            for version, changelog in new_versions.items()
-                        )
-
                         if tg_token:
-                            await tg.send_message(
-                                chat_id=chat_id,
-                                text=(
-                                    f'<b><a href="https://nexusmods.com/{game_domain_name}/mods/{mod_id}">'
-                                    f'{mod_details["name"]}</a></b>\n{mod_details["author"]} - Version {old_version} ->'
-                                    f' {new_version}\n{tagify(categories[mod_details["category_id"]])}\n\n'
-                                    f"Changelog:\n{changelog_text}"
-                                ),
-                                topic_id=topic_id,
+                            changelog_text = "\n".join(
+                                "<b>{}</b>\n- {}".format(version, "\n- ".join(changelog))
+                                for version, changelog in new_versions.items()
+                            )
+                            tasks.append(
+                                asyncio.create_task(
+                                    tg.send_mod(
+                                        chat_id=chat_id,
+                                        mod_title=mod_details.get("name", "N/A"),
+                                        mod_id=mod_id,
+                                        mod_author=mod_details["author"],
+                                        mod_game=mod_details["domain_name"],
+                                        mod_old_version=old_version,
+                                        mod_new_version=new_version,
+                                        mod_category=categories[mod_details["category_id"]],
+                                        content=(
+                                            "Changelog:\n " + changelog_text
+                                            if changelog_text
+                                            else "No changelog provided"
+                                        ),
+                                        images=await nm.get_image_urls(mod_id),
+                                        topic_id=topic_id,
+                                    )
+                                )
                             )
 
                         for version in new_versions:
@@ -335,6 +387,7 @@ async def updates(
                     topic_id=topic_id,
                     disable_web_page_preview=True,
                 )
+            await asyncio.gather(*tasks)
 
         except Exception as e:
             print(f"An error occurred: {e}")
