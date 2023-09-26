@@ -68,9 +68,9 @@ def fetch_mod_changelogs(api_key: str, game_domain_name: str, mod_id: int) -> di
     return nm_request(f"games/{game_domain_name}/mods/{mod_id}/changelogs.json", api_key)  # type: ignore[no-any-return]
 
 
-def send_telegram_message(chat_id: str, text: str, tg_token: str, topic_id: str) -> None:
+def send_telegram_message(chat_id: str, text: str, tg_token: str, topic_id: str, disable_web_page_preview: bool = False) -> None:
     url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": disable_web_page_preview}
     if topic_id:
         payload["message_thread_id"] = topic_id
     requests.post(url, data=payload)
@@ -196,6 +196,7 @@ def updates(
         print("Initial population of tracked mods complete.")
 
     while True:
+        new_mods = []
         try:
             print("Starting update check...")
             # Fetch list of all recently updated mods
@@ -218,6 +219,13 @@ def updates(
                         "latest_file_update": new_latest_file_update,
                         "is_adult": mod_details["contains_adult_content"],
                     }
+                    new_mods.append(
+                        {
+                            "Author": mod_details["author"],
+                            "Name": mod_details["name"],
+                            "Link": f"https://nexusmods.com/{game_domain_name}/mods/{mod_id}",
+                        }
+                    )
                     continue
 
                 # If the latest_file_update has changed or is new, there might be a new version
@@ -273,6 +281,18 @@ def updates(
                     }
 
             save_state(cache_file_path, local_cache)
+            if new_mods:
+                message = "New mods found:\n" + "\n".join(
+                    f'<a href="{mod["Link"]}">{mod["Name"]}</a> - {mod["Author"]}\n'
+                    for mod in new_mods
+                )
+                send_telegram_message(
+                    chat_id=chat_id,
+                    text=message,
+                    tg_token=tg_token,
+                    topic_id=topic_id,
+                    disable_web_page_preview=True,
+                )
 
         except Exception as e:
             print(f"An error occurred: {e}")
