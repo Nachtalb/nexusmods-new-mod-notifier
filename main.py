@@ -144,50 +144,45 @@ async def additions(
     while True:
         print("Starting new mod check...")
         mods = await nm.fetch_latest_mods(game_domain_name)
-        mods = [mod for mod in mods if mod["available"] and mod["mod_id"] not in seen_mods][:2]
+        mods = [mod for mod in mods if mod["mod_id"] not in seen_mods and mod["available"]]
         for mod in sorted(mods, key=lambda x: x["mod_id"]):
             mod_id = mod["mod_id"]
-            if mod_id not in seen_mods:
-                if not mod["available"]:
-                    print(f"Mod [id={mod_id}] not available yet, skipping...")
-                    continue
+            seen_mods.add(mod_id)
 
-                seen_mods.add(mod_id)
+            if hide_adult_content and mod["contains_adult_content"]:
+                print("Mod contains adult content, skipping...")
+                continue
 
-                if hide_adult_content and mod["contains_adult_content"]:
-                    print("Mod contains adult content, skipping...")
-                    continue
+            new_mod_data = {
+                "ID": mod_id,
+                "Author": mod["author"],
+                "Name": mod.get("name", "N/A"),
+                "Cagegory": categories[mod["category_id"]],
+                "Link": f"https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}",
+            }
+            new_mods_data.append(new_mod_data)
 
-                new_mod_data = {
-                    "ID": mod_id,
-                    "Author": mod["author"],
-                    "Name": mod.get("name", "N/A"),
-                    "Cagegory": categories[mod["category_id"]],
-                    "Link": f"https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}",
-                }
-                new_mods_data.append(new_mod_data)
-
-                if tg_token:
-                    images = (await nm.get_image_urls(mod_id))[:10]
-                    text = (
-                        "<b><a"
-                        f" href=\"https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}\">"
-                        f"{mod.get('name', 'N/A')}</a></b>\n{mod['author']} "
-                        f"{tagify(categories[mod['category_id']])}\n\n{mod['summary']}"
+            if tg_token:
+                images = (await nm.get_image_urls(mod_id))[:10]
+                text = (
+                    "<b><a"
+                    f" href=\"https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}\">"
+                    f"{mod.get('name', 'N/A')}</a></b>\n{mod['author']} "
+                    f"{tagify(categories[mod['category_id']])}\n\n{mod['summary']}"
+                )
+                if images:
+                    await tg.send_media_group(
+                        chat_id=chat_id,
+                        media=images,
+                        text=text,
+                        topic_id=topic_id,
                     )
-                    if images:
-                        await tg.send_media_group(
-                            chat_id=chat_id,
-                            media=images,
-                            text=text,
-                            topic_id=topic_id,
-                        )
-                    else:
-                        await tg.send_message(
-                            chat_id=chat_id,
-                            text=text,
-                            topic_id=topic_id,
-                        )
+                else:
+                    await tg.send_message(
+                        chat_id=chat_id,
+                        text=text,
+                        topic_id=topic_id,
+                    )
 
         if new_mods_data:
             print("New mods found:")
