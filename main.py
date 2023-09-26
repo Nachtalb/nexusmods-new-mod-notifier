@@ -22,13 +22,11 @@ class NM:
             "User-Agent": "NexusMods Notifier/0.2.0 (+https://github.com/Nachtalb/nexusmods-notifier)",
         }
         url = f"https://api.nexusmods.com/v1/{endpoint}"
-        async with  self.session.get(url, headers=headers, params=params) as response:
+        async with self.session.get(url, headers=headers, params=params) as response:
             return await response.json()
-
 
     async def fetch_games(self) -> list[dict[str, Any]]:
         return await self._nm_request("games.json", {"include_unapproved": "false"})  # type: ignore[no-any-return]
-
 
     async def game_categories(self, game_domain_name: str) -> dict[int, Any]:
         cache_file = Path("game_categories.json")
@@ -43,10 +41,8 @@ class NM:
         save_state(cache_file, cache)
         return cache[game_domain_name]  # type: ignore[no-any-return]
 
-
     async def fetch_latest_mods(self, game_domain_name: str) -> list[dict[str, Any]]:
         return await self._nm_request(f"games/{game_domain_name}/mods/latest_added.json")  # type: ignore[no-any-return]
-
 
     async def fetch_tracked_mods(self, game_domain_name: str = "") -> list[dict[str, Any]]:
         mods: list[dict[str, Any]] = await self._nm_request("user/tracked_mods.json")
@@ -54,10 +50,8 @@ class NM:
             mods = [mod for mod in mods if mod["domain_name"] == game_domain_name]
         return mods
 
-
     async def fetch_mod(self, game_domain_name: str, mod_id: int) -> dict[str, Any]:
         return await self._nm_request(f"games/{game_domain_name}/mods/{mod_id}.json")  # type: ignore[no-any-return]
-
 
     async def fetch_updated_mods(
         self, game_domain_name: str, time_period: Literal["1d", "1w", "1m"] = "1w"
@@ -361,6 +355,7 @@ async def updates(
             time.sleep(frequency)
         else:
             break
+
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
