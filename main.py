@@ -172,8 +172,8 @@ async def additions(
                     text = (
                         "<b><a"
                         f" href=\"https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}\">"
-                        f"{mod.get('name', 'N/A')}</a></b>\n{mod['author']} -"
-                        f" Version {mod['version']}\n{tagify(categories[mod['category_id']])}"
+                        f"{mod.get('name', 'N/A')}</a></b>\n{mod['author']} "
+                        f"{tagify(categories[mod['category_id']])}\n\n{mod['summary']}"
                     )
                     if images:
                         await tg.send_media_group(
