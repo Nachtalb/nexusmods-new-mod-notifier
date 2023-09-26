@@ -164,11 +164,12 @@ async def additions(
 
             if tg_token:
                 images = (await nm.get_image_urls(mod_id))[:10]
+                link = f"https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}"
                 text = (
                     "<b><a"
-                    f" href=\"https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}\">"
-                    f"{mod.get('name', 'N/A')}</a></b>\n{mod['author']} "
-                    f"{tagify(categories[mod['category_id']])}\n\n{mod['summary']}"
+                    f" href=\"{link}\">{mod.get('name', 'N/A')}</a></b>\n{mod['author']} "
+                    f"{tagify(categories[mod['category_id']])}\n\n{mod['summary']}\n\n<a"
+                    f" href='{link}'>View on Nexus</a>"
                 )
                 if images:
                     await tg.send_media_group(
