@@ -7,7 +7,9 @@ from pathlib import Path
 from typing import Any, Literal
 
 from aiohttp import ClientSession
+from bs4 import BeautifulSoup
 from tabulate import tabulate
+
 
 class NM:
     def __init__(self, api_key: str, session: ClientSession) -> None:
@@ -65,10 +67,13 @@ class NM:
             params={"period": time_period},
         )
 
-
     async def fetch_mod_changelogs(self, game_domain_name: str, mod_id: int) -> dict[str, list[str]]:
         return await self._nm_request(f"games/{game_domain_name}/mods/{mod_id}/changelogs.json")  # type: ignore[no-any-return]
 
+    async def get_image_urls(self, mod_id: int) -> list[str]:
+        async with self.session.get(f"https://www.nexusmods.com/starfield/mods/{mod_id}?tab=images") as response:
+            soup = BeautifulSoup(await response.text(), "html.parser")
+            return [a.attrs["href"] for a in soup.find_all("a", {"class": "mod-image"})]
 
 
 class TG:
@@ -76,20 +81,38 @@ class TG:
         self.session = session
         self.tg_token = tg_token
 
-
-    async def _tg_request(self, endpoint: str, data: dict[str, Any] | None = None) -> Any:
+    async def _tg_request(self, endpoint: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
         if data:
-            data= {key: value for key, value in data.items() if value is not None}
+            data = {key: value for key, value in data.items() if value is not None}
         url = f"https://api.telegram.org/bot{self.tg_token}/{endpoint}"
-        async with self.session.post(url, data=data) as response:
-            return await response.json()
+        async with self.session.post(url, json=data) as response:
+            return await response.json()  # type: ignore[no-any-return]
 
-    async def send_message(self, chat_id: int | str, text: str, topic_id: int | str | None = None, disable_web_page_preview: bool = False) -> None:
-        data = {"chat_id": chat_id, "text": text, "parse_mode": "HTML", "disable_web_page_preview": disable_web_page_preview}
+    async def send_message(
+        self, chat_id: int | str, text: str, topic_id: int | str | None = None, disable_web_page_preview: bool = False
+    ) -> dict[str, Any]:
+        data = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": disable_web_page_preview,
+        }
         if topic_id:
             data["message_thread_id"] = topic_id
-        await self._tg_request("sendMessage", data=data)
+        return await self._tg_request("sendMessage", data=data)
 
+    async def send_media_group(
+        self, chat_id: int | str, media: list[str], text: str | None = None, topic_id: int | str | None = None
+    ) -> dict[str, Any]:
+        photos = [{"type": "photo", "media": photo} for photo in media]
+        if text:
+            photos[0]["caption"] = text
+            photos[0]["parse_mode"] = "HTML"
+
+        data = {"chat_id": chat_id, "media": photos}
+        if topic_id:
+            data["message_thread_id"] = topic_id
+        return await self._tg_request("sendMediaGroup", data=data)
 
 
 def load_state(state_file: str | Path) -> Any:
@@ -126,7 +149,8 @@ async def additions(
 
     while True:
         print("Starting new mod check...")
-        mods = await nm.fetch_latest_mods(api_key)
+        mods = await nm.fetch_latest_mods(game_domain_name)
+        mods = [mod for mod in mods if mod["available"] and mod["mod_id"] not in seen_mods][:2]
         for mod in sorted(mods, key=lambda x: x["mod_id"]):
             mod_id = mod["mod_id"]
             if mod_id not in seen_mods:
@@ -150,16 +174,26 @@ async def additions(
                 new_mods_data.append(new_mod_data)
 
                 if tg_token:
-                    await tg.send_message(
-                        chat_id=chat_id,
-                        text=(
-                            "<b><a"
-                            f" href=\"https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}\">"
-                            f"{mod.get('name', 'N/A')}</a></b>\n{mod['author']} -"
-                            f" Version {mod['version']}\n{tagify(categories[mod['category_id']])}"
-                        ),
-                        topic_id=topic_id,
+                    images = (await nm.get_image_urls(mod_id))[:10]
+                    text = (
+                        "<b><a"
+                        f" href=\"https://nexusmods.com/{mod['domain_name']}/mods/{mod['mod_id']}\">"
+                        f"{mod.get('name', 'N/A')}</a></b>\n{mod['author']} -"
+                        f" Version {mod['version']}\n{tagify(categories[mod['category_id']])}"
                     )
+                    if images:
+                        await tg.send_media_group(
+                            chat_id=chat_id,
+                            media=images,
+                            text=text,
+                            topic_id=topic_id,
+                        )
+                    else:
+                        await tg.send_message(
+                            chat_id=chat_id,
+                            text=text,
+                            topic_id=topic_id,
+                        )
 
         if new_mods_data:
             print("New mods found:")
@@ -303,8 +337,7 @@ async def updates(
             save_state(cache_file_path, local_cache)
             if new_mods:
                 message = "New mods found:\n" + "\n".join(
-                    f'<a href="{mod["Link"]}">{mod["Name"]}</a> - {mod["Author"]}\n'
-                    for mod in new_mods
+                    f'<a href="{mod["Link"]}">{mod["Name"]}</a> - {mod["Author"]}\n' for mod in new_mods
                 )
                 await tg.send_message(
                     chat_id=chat_id,
